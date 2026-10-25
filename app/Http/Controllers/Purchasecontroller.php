@@ -2,81 +2,140 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\StorePurchaseRequest;
-use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\Supplier;
-use App\Services\PurchaseService;
+use App\Models\Product;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Validation\Rule;
 
 class PurchaseController extends Controller
 {
     public function index(Request $request)
     {
         $filters = $request->validate([
-            'q' => ['nullable', 'string', 'max:50'],
-            'supplier_id' => ['nullable', 'integer', 'exists:suppliers,id'],
-            'status' => ['nullable', Rule::in([Purchase::STATUS_COMPLETED, Purchase::STATUS_CANCELLED])],
+            'q'         => ['nullable', 'string', 'max:60'],
+            'status'    => ['nullable', 'in:completed,cancelled'],
             'date_from' => ['nullable', 'date'],
-            'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
-        ], [
-            'date_from.date' => 'Tanggal awal tidak valid.',
-            'date_to.date' => 'Tanggal akhir tidak valid.',
-            'date_to.after_or_equal' => 'Tanggal akhir tidak boleh sebelum tanggal awal.',
+            'date_to'   => ['nullable', 'date', 'after_or_equal:date_from'],
         ]);
 
-        $user = $request->user();
+        $user = auth()->user();
 
-        $purchases = Purchase::with(['supplier', 'user'])
+        $purchases = Purchase::with(['supplier', 'user', 'items'])
+            // Staff hanya melihat pembelian miliknya sendiri.
             ->when(! $user->isAdmin(), fn ($q) => $q->where('user_id', $user->id))
-            ->filtered($filters)
+            ->when($filters['q'] ?? null, fn ($query, $q) => $query->where('purchase_number', 'like', "%{$q}%"))
+            ->when($filters['status'] ?? null, fn ($query, $s) => $query->where('status', $s))
+            ->when($filters['date_from'] ?? null, fn ($query, $d) => $query->whereDate('purchased_at', '>=', $d))
+            ->when($filters['date_to'] ?? null, fn ($query, $d) => $query->whereDate('purchased_at', '<=', $d))
             ->latest('purchased_at')->latest('id')
             ->paginate(10)
             ->withQueryString();
 
-        return view('purchases.index', [
-            'purchases' => $purchases,
-            'suppliers' => Supplier::orderBy('name')->get(['id', 'name']),
-            'filters' => $filters,
+        return view('purchases.index', compact('purchases', 'filters'));
+    }
+
+    public function create(Request $request)
+    {
+        // Dukungan "Restock cepat": ?product={id} menyeleksi produk di baris pertama.
+        $preselectId = (int) $request->query('product', 0);
+
+        $suppliers = Supplier::orderBy('name')->get();
+        $products  = Product::orderBy('name')->get();
+        $preselect = $preselectId ? $products->firstWhere('id', $preselectId) : null;
+
+        return view('purchases.create', compact('suppliers', 'products', 'preselect'));
+    }
+
+    public function store(Request $request)
+    {
+        $request->validate([
+            'supplier_id'        => 'required|exists:suppliers,id',
+            'items'              => 'required|array|min:1',
+            'items.*.product_id' => 'required|exists:products,id',
+            'items.*.quantity'   => 'required|integer|min:1',
+            'items.*.unit_cost'  => 'required|numeric|min:0',
+        ], [
+            'supplier_id.required' => 'Pilih pemasok terlebih dahulu.',
+            'items.min'            => 'Tambahkan minimal satu produk.',
+            'items.*.quantity.min' => 'Jumlah produk minimal 1.',
+            'items.*.unit_cost.min'=> 'Harga beli tidak boleh negatif.',
+        ]);
+
+        DB::transaction(function () use ($request) {
+            $purchase = Purchase::create([
+                'supplier_id'     => $request->supplier_id,
+                'user_id'         => auth()->id() ?? 1,
+                'purchase_number' => 'PUR-' . date('YmdHis') . '-' . rand(100, 999),
+                'total'           => 0,
+                'status'          => 'completed',
+                'purchased_at'    => now(),
+            ]);
+
+            $grandTotal = 0;
+
+            foreach ($request->items as $item) {
+                $product = Product::lockForUpdate()->findOrFail($item['product_id']);
+                $qty = (int) $item['quantity'];
+                $unitCost = (float) $item['unit_cost'];
+                $subtotal = $unitCost * $qty;
+
+                $purchase->items()->create([
+                    'product_id' => $product->id,
+                    'quantity'   => $qty,
+                    'unit_cost'  => $unitCost,
+                    'subtotal'   => $subtotal,
+                ]);
+
+                $product->increment('stock', $qty);
+                $grandTotal += $subtotal;
+            }
+
+            $purchase->update(['total' => $grandTotal]);
+        });
+
+        return redirect()->route('purchases.index')->with('success', 'Pembelian berhasil! Stok barang otomatis bertambah.');
+    }
+
+    public function show(Purchase $purchase)
+    {
+        // Staff tidak boleh melihat pembelian milik pengguna lain.
+        if (! auth()->user()->isAdmin() && $purchase->user_id !== auth()->id()) {
+            abort(403);
+        }
+
+        return view('purchases.show', [
+            'purchase' => $purchase->loadMissing(['supplier', 'user', 'items.product']),
         ]);
     }
 
-    public function create()
+    public function cancel(Purchase $purchase)
     {
-        return view('purchases.create', [
-            'suppliers' => Supplier::orderBy('name')->get(['id', 'name']),
-            'products' => Product::orderBy('name')
-                ->get(['id', 'sku', 'name', 'purchase_price', 'stock']),
-        ]);
-    }
+        if (! $purchase->isCompleted()) {
+            return back()->with('error', 'Pembelian ini sudah dibatalkan sebelumnya.');
+        }
 
-    public function store(StorePurchaseRequest $request, PurchaseService $service)
-    {
-        $data = $request->validated();
+        try {
+            DB::transaction(function () use ($purchase) {
+                foreach ($purchase->items()->get() as $item) {
+                    $product = Product::lockForUpdate()->findOrFail($item->product_id);
 
-        $purchase = $service->create($request->user(), (int) $data['supplier_id'], $data['items']);
+                    if ($product->stock < $item->quantity) {
+                        throw new \RuntimeException(
+                            "Pembatalan ditolak: stok '{$product->name}' sudah terpakai oleh transaksi penjualan."
+                        );
+                    }
 
-        return redirect()->route('purchases.show', $purchase)
-            ->with('success', "Pembelian {$purchase->purchase_number} berhasil disimpan dan stok bertambah.");
-    }
+                    $product->decrement('stock', $item->quantity);
+                }
 
-    public function show(Request $request, Purchase $purchase)
-    {
-        abort_unless($request->user()->isAdmin() || $purchase->user_id === $request->user()->id, 403);
+                $purchase->forceFill(['status' => 'cancelled'])->save();
+            });
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
-        $purchase->load('items.product', 'supplier', 'user');
-
-        return view('purchases.show', compact('purchase'));
-    }
-
-    public function cancel(Purchase $purchase, PurchaseService $service)
-    {
-        Gate::authorize('cancel-transaction');
-
-        $service->cancel($purchase);
-
-        return back()->with('success', 'Pembelian dibatalkan dan stok disesuaikan.');
+        return redirect()->route('purchases.show', $purchase)->with('success', 'Pembelian dibatalkan. Stok barang dikurangi kembali.');
     }
 }
