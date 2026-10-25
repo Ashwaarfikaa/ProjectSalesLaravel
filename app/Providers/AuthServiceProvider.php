@@ -2,26 +2,53 @@
 
 namespace App\Providers;
 
-use App\Models\User;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
 use Illuminate\Support\Facades\Gate;
+use App\Models\User;
 
 class AuthServiceProvider extends ServiceProvider
 {
-    protected $policies = [];
+    /**
+     * The policy mappings for the application.
+     *
+     * @var array<class-string, class-string>
+     */
+    protected $policies = [
+        // 'App\Models\Model' => 'App\Policies\ModelPolicy',
+    ];
 
+    /**
+     * Register any authentication / authorization services.
+     *
+     * @return void
+     */
     public function boot()
     {
         $this->registerPolicies();
 
-        // Admin / Owner
-        Gate::define('manage-master', fn (User $user) => $user->isAdmin());
-        Gate::define('manage-users', fn (User $user) => $user->isAdmin());
-        Gate::define('cancel-transaction', fn (User $user) => $user->isAdmin());
+        // Kelola master data (kategori, dll): hanya Admin/Owner.
+        Gate::define('manage-master', function (User $user) {
+            return $user->isAdmin();
+        });
 
-        // Admin dan Staff
-        Gate::define('manage-sales', fn (User $user) => $user->isAdmin() || $user->isStaff());
-        Gate::define('manage-purchases', fn (User $user) => $user->isAdmin() || $user->isStaff());
-        Gate::define('manage-customers', fn (User $user) => $user->isAdmin() || $user->isStaff());
+        // Kelola pengguna & role: hanya Admin/Owner.
+        Gate::define('manage-users', function (User $user) {
+            return $user->isAdmin();
+        });
+
+        // Batalkan transaksi (pembelian/penjualan): hanya Admin/Owner.
+        Gate::define('cancel-transaction', function (User $user) {
+            return $user->isAdmin();
+        });
+
+        // Catat & lihat penjualan: Admin dan Staff.
+        Gate::define('manage-sales', function (User $user) {
+            return in_array($user->role, [User::ROLE_ADMIN, User::ROLE_STAFF]);
+        });
+
+        // Kelola pelanggan: Admin dan Staff.
+        Gate::define('manage-customers', function (User $user) {
+            return in_array($user->role, [User::ROLE_ADMIN, User::ROLE_STAFF]);
+        });
     }
 }

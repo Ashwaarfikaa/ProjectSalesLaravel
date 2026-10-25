@@ -11,42 +11,23 @@ class User extends Authenticatable
 
     public const ROLE_ADMIN = 'admin';
     public const ROLE_STAFF = 'staff';
-    public const ROLE_CUSTOMER = 'customer';
 
-    protected $fillable = [
-        'name',
-        'email',
-        'password',
-        'role',
-    ];
+    protected $fillable = ['name', 'email', 'password', 'role'];
+    protected $hidden = ['password', 'remember_token'];
 
-    protected $hidden = [
-        'password',
-        'remember_token',
-    ];
+    public function purchases() { return $this->hasMany(Purchase::class); }
+    public function sales() { return $this->hasMany(Sale::class); }
+    public function isAdmin(): bool { return $this->role === self::ROLE_ADMIN; }
 
-    public function isAdmin(): bool
-    {
-        return $this->role === self::ROLE_ADMIN;
-    }
-
-    public function isStaff(): bool
-    {
-        return $this->role === self::ROLE_STAFF;
-    }
-
-    public function isCustomer(): bool
-    {
-        return $this->role === self::ROLE_CUSTOMER;
-    }
-
+    /**
+     * Label role untuk ditampilkan di UI (sidebar dsb).
+     */
     public function roleLabel(): string
     {
         return match ($this->role) {
             self::ROLE_ADMIN => 'Admin / Owner',
             self::ROLE_STAFF => 'Staff Kasir',
-            self::ROLE_CUSTOMER => 'Pelanggan',
-            default => 'Pengguna',
+            default => ucfirst($this->role),
         };
     }
 }
