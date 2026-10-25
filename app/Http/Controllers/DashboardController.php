@@ -4,58 +4,66 @@ namespace App\Http\Controllers;
 
 use App\Models\Customer;
 use App\Models\Product;
+use App\Models\Purchase;
 use App\Models\Sale;
-use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
-    public function index(Request $request)
+    /**
+     * Ringkasan bisnis yang dihitung langsung dari database (agregat),
+     * bukan angka statis. Staff hanya melihat transaksi miliknya sendiri;
+     * Admin/Owner melihat seluruh toko.
+     */
+    public function index()
     {
-        $user = $request->user();
+        $user = auth()->user();
 
-        // Admin melihat seluruh penjualan; staff hanya miliknya sendiri.
-        $sales = fn () => Sale::completed()
+        // Scope transaksi sesuai role (admin = semua, staff = miliknya)
+        $sales = Sale::query()
+            ->when(! $user->isAdmin(), fn ($q) => $q->where('user_id', $user->id));
+        $salesCompleted = (clone $sales)->completed();
+        $purchases = Purchase::query()
             ->when(! $user->isAdmin(), fn ($q) => $q->where('user_id', $user->id));
 
         $stats = [
-            'products' => Product::count(),
-            'customers' => Customer::count(),
-            'low_stock' => Product::lowStock()->count(),
-            'sales_today' => $sales()->whereDate('sold_at', today())->sum('total'),
-            'sales_month' => $sales()
-                ->whereYear('sold_at', now()->year)
-                ->whereMonth('sold_at', now()->month)
-                ->sum('total'),
-            'sales_count' => $sales()->count(),
-            'purchases_count' => 0, // Dinetralkan jadi 0 agar Blade view tidak error
+            'products'        => Product::count(),
+            'customers'       => Customer::count(),
+            'low_stock'       => Product::whereColumn('stock', '<=', 'minimum_stock')->count(),
+            'sales_today'     => (clone $salesCompleted)->whereDate('sold_at', today())->sum('total'),
+            'sales_month'     => (clone $salesCompleted)
+                                    ->whereMonth('sold_at', today()->month)
+                                    ->whereYear('sold_at', today()->year)
+                                    ->sum('total'),
+            'sales_count'     => (clone $sales)->count(),
+            'purchases_count' => (clone $purchases)->count(),
         ];
 
-        // Penjualan 7 hari terakhir (query agregat).
-        $daily = $sales()
-            ->where('sold_at', '>=', now()->subDays(6)->startOfDay())
-            ->selectRaw('DATE(sold_at) as day, SUM(total) as total')
-            ->groupBy('day')
-            ->pluck('total', 'day');
-
-        $chart = collect(range(6, 0))->map(function ($i) use ($daily) {
-            $date = now()->subDays($i);
-
-            return [
-                'label' => $date->format('d/m'),
-                'total' => (float) ($daily[$date->toDateString()] ?? 0),
+        // Tren penjualan 7 hari terakhir (penjualan selesai saja)
+        $labels = [0 => 'Min', 1 => 'Sen', 2 => 'Sel', 3 => 'Rab', 4 => 'Kam', 5 => 'Jum', 6 => 'Sab'];
+        $chart = [];
+        for ($i = 6; $i >= 0; $i--) {
+            $day = today()->subDays($i);
+            $chart[] = [
+                'label' => $labels[$day->format('w')],
+                'total' => (clone $salesCompleted)->whereDate('sold_at', $day)->sum('total'),
                 'today' => $i === 0,
             ];
-        });
+        }
+        $dayTotals = array_map('intval', array_column($chart, 'total'));
+        $chartMax = max(1, max($dayTotals));
 
-        return view('dashboard', [
-            'stats' => $stats,
-            'chart' => $chart,
-            'chartMax' => max(1, $chart->max('total')),
-            'lowStockProducts' => Product::with('category')->lowStock()
-                ->orderByRaw('(minimum_stock - stock) desc')->limit(5)->get(),
-            'recentSales' => Sale::with('user')
-                ->when(! $user->isAdmin(), fn ($q) => $q->where('user_id', $user->id))
-                ->latest('sold_at')->latest('id')->limit(5)->get(),
-        ]);
+        // Produk bermasalah (restok) & penjualan terbaru
+        $lowStockProducts = Product::whereColumn('stock', '<=', 'minimum_stock')
+            ->orderBy('stock')->orderBy('name')
+            ->limit(6)->get();
+
+        $recentSales = (clone $sales)
+            ->with(['user', 'items'])
+            ->latest('sold_at')->latest('id')
+            ->limit(6)->get();
+
+        return view('layouts.dashboard', compact(
+            'stats', 'chart', 'chartMax', 'lowStockProducts', 'recentSales'
+        ));
     }
 }

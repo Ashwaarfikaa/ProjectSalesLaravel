@@ -1,12 +1,12 @@
 @extends('layouts.app')
-@section('title', 'Dashboard - Sweet Glaze')
+@section('title', 'Dashboard - SummitGear')
 
 @section('content')
 <section class="hero">
     <div class="top-bar">
         <div>
             <h1 class="page-title">Selamat datang, {{ Auth::user()->name }}</h1>
-            <p class="page-subtitle">Ringkasan stok dan penjualan Sweet Glaze.</p>
+            <p class="page-subtitle">Ringkasan stok dan penjualan SummitGear.</p>
         </div>
         @can('manage-sales')
             <a href="{{ route('sales.create') }}" class="btn-primary-action">Penjualan baru</a>
@@ -16,7 +16,7 @@
 
 <div class="stat-grid">
     <div class="card stat-card">
-        <div class="stat-icon berry" aria-hidden="true">📦</div>
+        <div class="stat-icon sky" aria-hidden="true">📦</div>
         <div>
             <div class="stat-label">Total produk</div>
             <div class="stat-value">{{ $stats['products'] }}</div>
@@ -24,7 +24,7 @@
     </div>
 
     <div class="card stat-card">
-        <div class="stat-icon pistachio" aria-hidden="true">👥</div>
+        <div class="stat-icon moss" aria-hidden="true">👥</div>
         <div>
             <div class="stat-label">Pelanggan terdaftar</div>
             <div class="stat-value">{{ $stats['customers'] }}</div>
@@ -32,7 +32,7 @@
     </div>
 
     <div class="card stat-card">
-        <div class="stat-icon sprinkle" aria-hidden="true">⚠️</div>
+        <div class="stat-icon sun" aria-hidden="true">⚠️</div>
         <div>
             <div class="stat-label">Produk stok rendah</div>
             <div class="stat-value">{{ $stats['low_stock'] }}</div>
@@ -40,7 +40,7 @@
     </div>
 
     <div class="card stat-card">
-        <div class="stat-icon pistachio" aria-hidden="true">💰</div>
+        <div class="stat-icon moss" aria-hidden="true">💰</div>
         <div>
             <div class="stat-label">Penjualan hari ini</div>
             <div class="stat-value sm">@rupiah($stats['sales_today'])</div>
@@ -48,7 +48,7 @@
     </div>
 
     <div class="card stat-card">
-        <div class="stat-icon berry" aria-hidden="true">📅</div>
+        <div class="stat-icon sky" aria-hidden="true">📅</div>
         <div>
             <div class="stat-label">Penjualan bulan ini</div>
             <div class="stat-value sm">@rupiah($stats['sales_month'])</div>
@@ -56,7 +56,7 @@
     </div>
 
     <div class="card stat-card">
-        <div class="stat-icon pistachio" aria-hidden="true">🧾</div>
+        <div class="stat-icon moss" aria-hidden="true">🧾</div>
         <div>
             <div class="stat-label">Jumlah transaksi</div>
             <div class="stat-value">{{ $stats['sales_count'] + ($stats['purchases_count'] ?? 0) }}</div>
@@ -65,6 +65,44 @@
             </div>
         </div>
     </div>
+</div>
+
+<div class="quick-grid">
+    <a href="{{ route('purchases.create') }}" class="card quick-link">
+        <div class="quick-icon a" aria-hidden="true">🛒</div>
+        <div>
+            <h3>Buat pembelian</h3>
+            <p>Tambah stok barang dari pemasok.</p>
+        </div>
+    </a>
+
+    @can('manage-sales')
+        <a href="{{ route('sales.create') }}" class="card quick-link">
+            <div class="quick-icon b" aria-hidden="true">🧾</div>
+            <div>
+                <h3>Buat penjualan</h3>
+                <p>Catat transaksi kasir baru.</p>
+            </div>
+        </a>
+    @endcan
+
+    @can('manage-master')
+        <a href="{{ route('products.create') }}" class="card quick-link">
+            <div class="quick-icon c" aria-hidden="true">📦</div>
+            <div>
+                <h3>Tambah produk</h3>
+                <p>Daftarkan item &amp; stok awal.</p>
+            </div>
+        </a>
+    @endcan
+
+    <a href="{{ route('products.low-stock') }}" class="card quick-link">
+        <div class="quick-icon d" aria-hidden="true">⚠️</div>
+        <div>
+            <h3>Pantau stok rendah</h3>
+            <p>Item yang perlu dipesan ulang.</p>
+        </div>
+    </a>
 </div>
 
 <div class="dash-grid">
