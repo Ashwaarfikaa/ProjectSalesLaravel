@@ -13,7 +13,11 @@ class DropLegacyInventoryTables extends Migration
     {
         Schema::disableForeignKeyConstraints();
 
-        foreach (['transaction_items', 'transaction_details', 'transactions', 'customers', 'products'] as $table) {
+        // Hapus TABLES LEGACY versi pertama (aplikasi "Donuts") saja.
+        // Tabel products/customers dipakai ulang oleh skema terintegrasi,
+        // sehingga tidak boleh kita drop di sini (migration pembentuknya
+        // sudah punya guard hasTable sendiri).
+        foreach (['transaction_items', 'transaction_details', 'transactions'] as $table) {
             Schema::dropIfExists($table);
         }
 

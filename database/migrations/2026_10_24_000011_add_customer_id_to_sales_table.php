@@ -8,6 +8,10 @@ class AddCustomerIdToSalesTable extends Migration
 {
     public function up()
     {
+        if (Schema::hasColumn('sales', 'customer_id')) {
+            return;
+        }
+
         Schema::table('sales', function (Blueprint $table) {
             // Opsional: penjualan bisa untuk pelanggan umum (tanpa data pelanggan).
             $table->foreignId('customer_id')->nullable()->after('user_id')

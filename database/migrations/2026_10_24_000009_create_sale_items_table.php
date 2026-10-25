@@ -8,6 +8,10 @@ class CreateSaleItemsTable extends Migration
 {
     public function up()
     {
+        if (Schema::hasTable('sale_items')) {
+            return;
+        }
+
         Schema::create('sale_items', function (Blueprint $table) {
             $table->id();
             $table->foreignId('sale_id')->constrained('sales')->cascadeOnDelete();

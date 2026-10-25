@@ -8,6 +8,10 @@ class CreateSalesTable extends Migration
 {
     public function up()
     {
+        if (Schema::hasTable('sales')) {
+            return;
+        }
+
         Schema::create('sales', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained('users')->restrictOnDelete();
