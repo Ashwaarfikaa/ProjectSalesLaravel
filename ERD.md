@@ -12,7 +12,7 @@ erDiagram
     SUPPLIERS ||--o{ PURCHASES : "memasok"
     PURCHASES ||--o{ PURCHASE_ITEMS : "memuat rincian"
     PRODUCTS ||--o{ PURCHASE_ITEMS : "dibeli"
-    CUSTOMERS |o--o{ SALES : "td ditautkan (opsional)"
+    CUSTOMERS |o--o{ SALES : "checkout (boleh tanpa pelanggan)"
     SALES ||--o{ SALE_ITEMS : "memuat rincian"
     PRODUCTS ||--o{ SALE_ITEMS : "terjual"
 

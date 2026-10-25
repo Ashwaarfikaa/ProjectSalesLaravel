@@ -119,25 +119,85 @@ Ringkasannya:
 
 ```mermaid
 erDiagram
-  users ||--o{ sales : mencatat
-  users ||--o{ purchases : mencatat
-  categories ||--o{ products : memiliki
-  suppliers ||--o{ purchases : memasok
-  customers ||--o{ sales : melakukan
-  purchases ||--|{ purchase_items : berisi
-  sales ||--|{ sale_items : berisi
-  products ||--o{ purchase_items : dibeli
-  products ||--o{ sale_items : dijual
+    USERS ||--o{ SALES : mencatat
+    USERS ||--o{ PURCHASES : mencatat
+    CATEGORIES ||--o{ PRODUCTS : memiliki
+    SUPPLIERS ||--o{ PURCHASES : memasok
+    CUSTOMERS |o--o{ SALES : checkout
+    PURCHASES ||--|{ PURCHASE_ITEMS : berisi
+    SALES ||--|{ SALE_ITEMS : berisi
+    PRODUCTS ||--o{ PURCHASE_ITEMS : dibeli
+    PRODUCTS ||--o{ SALE_ITEMS : dijual
 
-  users { id id PK name string email string UK password string role string }
-  categories { id id PK name string UK }
-  products { id id PK category_id id FK sku string UK name string purchase_price decimal selling_price decimal stock int minimum_stock int }
-  suppliers { id id PK name string phone string email string }
-  purchases { id id PK supplier_id id FK user_id id FK purchase_number string UK total decimal status string purchased_at datetime }
-  purchase_items { id id PK purchase_id id FK product_id id FK quantity int unit_cost decimal subtotal decimal }
-  sales { id id PK user_id id FK customer_id id FK nullable sale_number string UK total decimal status string sold_at datetime }
-  sale_items { id id PK sale_id id FK product_id id FK quantity int unit_price decimal subtotal decimal }
-  customers { id id PK name string phone string email string }
+    USERS {
+        int id PK
+        string name
+        string email UK
+        string password
+        string role "admin atau staff"
+    }
+    CATEGORIES {
+        int id PK
+        string name UK
+    }
+    PRODUCTS {
+        int id PK
+        int category_id FK
+        string sku UK
+        string name
+        decimal purchase_price
+        decimal selling_price
+        int stock
+        int minimum_stock
+    }
+    SUPPLIERS {
+        int id PK
+        string name
+        string phone
+        string email
+        string address
+    }
+    PURCHASES {
+        int id PK
+        int supplier_id FK
+        int user_id FK
+        string purchase_number UK
+        decimal total
+        string status
+        datetime purchased_at
+    }
+    PURCHASE_ITEMS {
+        int id PK
+        int purchase_id FK
+        int product_id FK
+        int quantity
+        decimal unit_cost
+        decimal subtotal
+    }
+    CUSTOMERS {
+        int id PK
+        string name
+        string phone
+        string email
+        string address
+    }
+    SALES {
+        int id PK
+        int user_id FK
+        int customer_id FK "boleh kosong"
+        string sale_number UK
+        decimal total
+        string status
+        datetime sold_at
+    }
+    SALE_ITEMS {
+        int id PK
+        int sale_id FK
+        int product_id FK
+        int quantity
+        decimal unit_price
+        decimal subtotal
+    }
 ```
 
 **Relasi Eloquent**: `Category hasMany Product`, `Product belongsTo Category`,
