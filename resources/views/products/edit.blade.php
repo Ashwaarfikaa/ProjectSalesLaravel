@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', 'Ubah Produk - Sweet Glaze')
+@section('title', 'Ubah Produk - SummitGear')
 
 @section('content')
 <div class="top-bar">
@@ -9,7 +9,7 @@
 <form method="POST" action="{{ route('products.update', $product) }}" class="card form-card">
     @csrf
     @method('PUT')
-    @include('products._form')
+    @include('products.form')
     <div class="form-actions">
         <button type="submit" class="btn btn-primary">Simpan perubahan</button>
         <a href="{{ route('products.show', $product) }}" class="btn">Batal</a>

@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', 'Tambah Kategori - Sweet Glaze')
+@section('title', 'Tambah Kategori - SummitGear')
 
 @section('content')
 <div class="top-bar"><h1 class="page-title">Tambah kategori</h1></div>

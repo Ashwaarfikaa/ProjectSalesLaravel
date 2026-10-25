@@ -1,190 +1,111 @@
 @extends('layouts.app')
-@section('title', 'Penjualan Baru - Sweet Glaze')
+
+@section('title', 'Penjualan Baru - SummitGear')
 
 @section('content')
-@php
-    $payload = [
-        'mode' => 'sale',
-        'products' => $products->map(fn ($p) => [
-            'id' => $p->id, 'sku' => $p->sku, 'name' => $p->name,
-            'price' => (float) $p->selling_price, 'stock' => $p->stock,
-        ])->values(),
-        'old' => array_values(old('items', [])),
-    ];
-@endphp
-
-<div class="top-bar">
-    <div>
-        <h1 class="page-title">Penjualan baru</h1>
-        <p class="page-subtitle">Pilih produk dan jumlah. Stok berkurang setelah transaksi tersimpan.</p>
+<section>
+    <div class="top-bar">
+        <div>
+            <h1 class="page-title">Transaksi penjualan (stock-out)</h1>
+            <p class="page-subtitle">Stok dijaga server: transaksi ditolak bila jumlah melebihi stok tersedia.</p>
+        </div>
+        <a href="{{ route('sales.index') }}" class="btn">Kembali</a>
     </div>
-</div>
+</section>
 
-<form method="POST" action="{{ route('sales.store') }}">
+<form method="POST" action="{{ route('sales.store') }}" class="card form-card" id="saleForm">
     @csrf
-    <div class="card" style="margin-bottom:18px">
-        <div class="form-group" style="max-width:420px;margin-bottom:0">
+
+    <div class="form-grid">
+        <div class="form-group full">
             <label for="customer_id">Pelanggan (opsional)</label>
             <select id="customer_id" name="customer_id">
                 <option value="">Pembeli umum</option>
                 @foreach ($customers as $customer)
                     <option value="{{ $customer->id }}" {{ old('customer_id') == $customer->id ? 'selected' : '' }}>
-                        {{ $customer->name }}{{ $customer->phone ? ' - ' . $customer->phone : '' }}
+                        {{ $customer->name }}
                     </option>
                 @endforeach
             </select>
             @error('customer_id') <div class="field-error">{{ $message }}</div> @enderror
-            @can('manage-customers')
-                <p class="hint">Pelanggan belum terdaftar? <a href="{{ route('customers.create') }}" target="_blank" rel="noopener">Tambah pelanggan baru</a>, lalu muat ulang halaman ini.</p>
-            @endcan
         </div>
     </div>
 
-    <div class="card" style="margin-bottom:18px">
-        <div class="table-wrap">
-            <table class="items-table">
-                <thead>
+    <h2 style="margin-top:14px">Item penjualan</h2>
+    <div class="table-wrap">
+        <table class="items-table" id="itemsTable">
+            <thead>
+                <tr><th style="width:45%">Produk</th><th style="width:18%">Jumlah</th><th style="width:25%">Stok tersedia</th><th style="width:12%"></th></tr>
+            </thead>
+            <tbody>
+                @php $rows = old('items', [null]); @endphp
+                @foreach ($rows as $i => $item)
                     <tr>
-                        <th>Produk</th>
-                        <th class="num">Harga</th>
-                        <th class="num">Stok</th>
-                        <th style="width:110px">Jumlah</th>
-                        <th class="num">Subtotal</th>
-                        <th style="width:40px"></th>
+                        <td>
+                            <select name="items[{{ $i }}][product_id]" required>
+                                <option value="">-- Pilih produk --</option>
+                                @foreach ($products as $product)
+                                    <option value="{{ $product->id }}"
+                                        data-stock="{{ $product->stock }}"
+                                        {{ ($item['product_id'] ?? '') == $product->id ? 'selected' : '' }}>
+                                        {{ $product->name }} ({{ $product->sku }})
+                                    </option>
+                                @endforeach
+                            </select>
+                        </td>
+                        <td><input type="number" name="items[{{ $i }}][quantity]" min="1" value="{{ $item['quantity'] ?? 1 }}" required></td>
+                        <td class="stock-cell num muted">pilih produk</td>
+                        <td><button type="button" class="remove-row btn btn-sm btn-danger">&times;</button></td>
                     </tr>
-                </thead>
-                <tbody id="rows"></tbody>
-            </table>
-        </div>
-
-        <div style="margin-top:12px">
-            <button type="button" class="btn" id="addRow">+ Tambah item</button>
-        </div>
-
-        <div class="total-bar">
-            <span>Total</span>
-            <strong id="grand">Rp 0</strong>
-        </div>
-        <p class="hint">Angka ini perkiraan tampilan. Server menghitung ulang total dari harga di database.</p>
+                @endforeach
+            </tbody>
+        </table>
     </div>
+    @error('items') <div class="field-error">{{ $message }}</div> @enderror
 
-    <div class="form-actions">
-        <button type="submit" class="btn btn-primary">Simpan penjualan</button>
-        <a href="{{ route('sales.index') }}" class="btn">Batal</a>
+    <div class="total-bar">
+        <span>Harga jual & total dihitung oleh server dari data produk.</span>
+        <div class="btn-row">
+            <button type="button" class="btn" id="addRow">+ Tambah item</button>
+            <button type="submit" class="btn btn-primary">Simpan penjualan</button>
+        </div>
     </div>
 </form>
-
-<script type="application/json" id="tx-data">@json($payload)</script>
 @endsection
 
 @push('scripts')
 <script>
-document.addEventListener('DOMContentLoaded', function () {
-    var txDataEl = document.getElementById('tx-data');
-    if (!txDataEl) return;
+    (function () {
+        let index = {{ count($rows) }};
+        const tbody = document.querySelector('#itemsTable tbody');
 
-    var txData = JSON.parse(txDataEl.textContent || '{}');
-    var products = txData.products || [];
-    var oldItems = txData.old || [];
+        const stockInfo = @json($products->mapWithKeys(fn ($p) => [$p->id => ['stock' => $p->stock, 'price' => $p->selling_price]]));
 
-    var rowsContainer = document.getElementById('rows');
-    var addRowBtn = document.getElementById('addRow');
-    var grandEl = document.getElementById('grand');
-
-    function formatRp(val) {
-        return 'Rp ' + new Intl.NumberFormat('id-ID').format(val || 0);
-    }
-
-    function recalculateGrand() {
-        var total = 0;
-        var trs = rowsContainer.querySelectorAll('tr');
-        trs.forEach(function (tr) {
-            var sel = tr.querySelector('.prod-select');
-            var qtyInp = tr.querySelector('.qty-input');
-            if (sel && sel.value && qtyInp && qtyInp.value) {
-                var price = parseFloat(sel.options[sel.selectedIndex].getAttribute('data-price') || 0);
-                var qty = parseInt(qtyInp.value, 10) || 0;
-                total += price * qty;
-            }
-        });
-        if (grandEl) grandEl.textContent = formatRp(total);
-    }
-
-    function createRow(initialData) {
-        initialData = initialData || {};
-        var index = Date.now() + Math.random().toString().slice(2, 6);
-        var tr = document.createElement('tr');
-
-        var optionsHtml = '<option value="">-- Pilih produk --</option>';
-        products.forEach(function (p) {
-            var selected = (initialData.product_id == p.id) ? 'selected' : '';
-            optionsHtml += '<option value="' + p.id + '" data-price="' + p.price + '" data-stock="' + p.stock + '" ' + selected + '>' + p.name + ' (' + p.sku + ')</option>';
-        });
-
-        tr.innerHTML = 
-            '<td><select name="items[' + index + '][product_id]" class="prod-select" required>' + optionsHtml + '</select></td>' +
-            '<td class="num price-td">Rp 0</td>' +
-            '<td class="num stock-td">-</td>' +
-            '<td><input type="number" name="items[' + index + '][quantity]" class="qty-input" value="' + (initialData.quantity || 1) + '" min="1" required disabled></td>' +
-            '<td class="num subtotal-td">Rp 0</td>' +
-            '<td style="text-align:center"><button type="button" class="btn remove-row" style="padding:2px 8px; color:var(--danger, #e53e3e); border:none; background:none; font-size:18px; cursor:pointer">&times;</button></td>';
-
-        rowsContainer.appendChild(tr);
-
-        var sel = tr.querySelector('.prod-select');
-        var qtyInp = tr.querySelector('.qty-input');
-        var priceTd = tr.querySelector('.price-td');
-        var stockTd = tr.querySelector('.stock-td');
-        var subtotalTd = tr.querySelector('.subtotal-td');
-        var removeBtn = tr.querySelector('.remove-row');
-
-        function updateRow() {
-            var opt = sel.options[sel.selectedIndex];
-            if (sel.value && opt) {
-                var price = parseFloat(opt.getAttribute('data-price') || 0);
-                var stock = parseInt(opt.getAttribute('data-stock') || 0, 10);
-                priceTd.textContent = formatRp(price);
-                stockTd.textContent = stock;
-                qtyInp.max = stock;
-                qtyInp.disabled = false;
-
-                var qty = parseInt(qtyInp.value, 10) || 0;
-                subtotalTd.textContent = formatRp(price * qty);
-            } else {
-                priceTd.textContent = 'Rp 0';
-                stockTd.textContent = '-';
-                qtyInp.disabled = true;
-                subtotalTd.textContent = 'Rp 0';
-            }
-            recalculateGrand();
+        function fillStockCell(row) {
+            const select = row.querySelector('select');
+            const cell = row.querySelector('.stock-cell');
+            const info = stockInfo[select.value];
+            cell.textContent = info ? info.stock + ' pcs tersedia' : 'pilih produk';
         }
 
-        sel.addEventListener('change', updateRow);
-        qtyInp.addEventListener('input', updateRow);
-
-        removeBtn.addEventListener('click', function () {
-            tr.remove();
-            recalculateGrand();
+        document.getElementById('addRow').addEventListener('click', function () {
+            const template = tbody.rows[0];
+            const row = template.cloneNode(true);
+            const i = index;
+            row.querySelector('select').name = `items[${i}][product_id]`;
+            row.querySelector('select').value = '';
+            row.querySelector('input').name = `items[${i}][quantity]`;
+            row.querySelector('input').value = 1;
+            tbody.appendChild(row);
+            index++;
+            fillStockCell(row);
         });
 
-        if (sel.value) {
-            updateRow();
-        }
-    }
-
-    if (addRowBtn) {
-        addRowBtn.addEventListener('click', function () {
-            createRow();
+        tbody.addEventListener('change', function (e) {
+            if (e.target.tagName === 'SELECT') fillStockCell(e.target.closest('tr'));
         });
-    }
 
-    if (oldItems && oldItems.length > 0) {
-        oldItems.forEach(function (item) {
-            createRow(item);
-        });
-    } else {
-        createRow();
-    }
-});
+        tbody.querySelectorAll('tr').forEach(fillStockCell);
+    })();
 </script>
 @endpush

@@ -1,69 +1,76 @@
 @extends('layouts.app')
-@section('title', 'Produk - Sweet Glaze')
+
+@section('title', 'Produk - SummitGear')
 
 @section('content')
-<div class="top-bar">
-    <div>
-        <h1 class="page-title">Produk</h1>
-        <p class="page-subtitle">Daftar donat dan minuman beserta stoknya.</p>
-    </div>
-    <div class="btn-row">
-        <a href="{{ route('products.low-stock') }}" class="btn">Stok rendah</a>
+<section>
+    <div class="top-bar">
+        <div>
+            <h1 class="page-title">Daftar produk</h1>
+            <p class="page-subtitle">Kelola master data produk, harga, dan stok barang.</p>
+        </div>
         @can('manage-master')
-            <a href="{{ route('products.create') }}" class="btn btn-primary">Tambah produk</a>
+            <a href="{{ route('products.create') }}" class="btn btn-primary">+ Produk baru</a>
         @endcan
     </div>
-</div>
-
-<form method="GET" action="{{ route('products.index') }}" class="card filters">
-    <div class="field grow">
-        <label for="q">Cari SKU atau nama</label>
-        <input type="search" id="q" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="Contoh: DN-001 atau Glaze">
-    </div>
-    <div class="field">
-        <label for="category_id">Kategori</label>
-        <select id="category_id" name="category_id">
-            <option value="">Semua kategori</option>
-            @foreach ($categories as $category)
-                <option value="{{ $category->id }}" {{ (($filters['category_id'] ?? '') == $category->id) ? 'selected' : '' }}>{{ $category->name }}</option>
-            @endforeach
-        </select>
-    </div>
-    <div class="btn-row">
-        <button type="submit" class="btn btn-primary">Terapkan</button>
-        <a href="{{ route('products.index') }}" class="btn">Atur ulang</a>
-    </div>
-</form>
+</section>
 
 <div class="card table-card">
+    <h2>Pencarian & filter</h2>
+    <form method="GET" action="{{ route('products.index') }}" class="filters">
+        <div class="form-group">
+            <label for="q">Cari</label>
+            <input type="text" id="q" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="SKU atau nama produk...">
+        </div>
+        <div class="form-group">
+            <label for="category">Kategori</label>
+            <select id="category" name="category">
+                <option value="">Semua kategori</option>
+                @foreach ($categories as $category)
+                    <option value="{{ $category->id }}" {{ ($filters['category'] ?? '') == $category->id ? 'selected' : '' }}>
+                        {{ $category->name }}
+                    </option>
+                @endforeach
+            </select>
+        </div>
+        <div class="btn-row">
+            <button type="submit" class="btn btn-primary">Filter</button>
+            <a href="{{ route('products.index') }}" class="btn">Reset</a>
+        </div>
+    </form>
+
     <div class="table-wrap">
         <table>
             <thead>
                 <tr>
-                    <th>SKU</th><th>Nama</th><th>Kategori</th>
-                    <th class="num">Harga beli</th><th class="num">Harga jual</th><th class="num">Stok</th>
-                    <th></th>
+                    <th>SKU</th><th>Produk</th><th>Kategori</th>
+                    <th class="num">Harga beli</th><th class="num">Harga jual</th>
+                    <th class="num">Stok</th><th>Aksi</th>
                 </tr>
             </thead>
             <tbody>
                 @forelse ($products as $product)
-                    <tr class="{{ $product->isLowStock() ? 'is-low' : '' }}">
+                    <tr>
                         <td class="mono">{{ $product->sku }}</td>
                         <td><a href="{{ route('products.show', $product) }}"><strong>{{ $product->name }}</strong></a></td>
                         <td>{{ $product->category->name }}</td>
-                        <td class="num">@rupiah($product->purchase_price)</td>
-                        <td class="num">@rupiah($product->selling_price)</td>
+                        <td class="num">{{ number_format($product->purchase_price, 0, ',', '.') }}</td>
+                        <td class="num">{{ number_format($product->selling_price, 0, ',', '.') }}</td>
                         <td class="num">
-                            {{ $product->stock }}
-                            @if ($product->isLowStock()) <span class="badge badge-danger">Rendah</span> @endif
+                            @if ($product->isLowStock())
+                                <span class="badge badge-danger">{{ $product->stock }} / min {{ $product->minimum_stock }}</span>
+                            @else
+                                <span class="badge badge-success">{{ $product->stock }}</span>
+                            @endif
                         </td>
                         <td class="actions">
                             <a href="{{ route('products.show', $product) }}" class="btn btn-sm">Detail</a>
                             @can('manage-master')
-                                <a href="{{ route('products.edit', $product) }}" class="btn btn-edit btn-sm">Ubah</a>
-                                <form method="POST" action="{{ route('products.destroy', $product) }}" onsubmit="return confirm('Hapus produk ini?')">
+                                <a href="{{ route('products.edit', $product) }}" class="btn btn-sm">Ubah</a>
+                                <form method="POST" action="{{ route('products.destroy', $product) }}"
+                                      onsubmit="return confirm('Hapus produk ini?')">
                                     @csrf @method('DELETE')
-                                    <button type="submit" class="btn btn-danger btn-sm">Hapus</button>
+                                    <button type="submit" class="btn btn-sm btn-danger">Hapus</button>
                                 </form>
                             @endcan
                         </td>
@@ -74,7 +81,7 @@
             </tbody>
         </table>
     </div>
-</div>
 
-{{ $products->links() }}
+    {{ $products->links() }}
+</div>
 @endsection

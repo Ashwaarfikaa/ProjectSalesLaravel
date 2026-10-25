@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', $product->name . ' - Sweet Glaze')
+@section('title', $product->name . ' - SummitGear')
 
 @section('content')
 <div class="top-bar">

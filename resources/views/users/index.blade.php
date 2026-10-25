@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', 'Pengguna - Sweet Glaze')
+@section('title', 'Pengguna - SummitGear')
 
 @section('content')
 <div class="top-bar">
